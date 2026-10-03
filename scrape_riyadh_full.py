@@ -22,7 +22,7 @@ def save_checkpoint(new_listings, filename="riyadh_raw_listings.csv"):
         header=not file_exists,
         encoding="utf-8-sig",
     )
-    print(f"💾 Checkpoint saved: Appended {len(df)} records to {filename}")
+    print(f"💾 Checkpoint saved: Appended {len(df)} records to {filename}", flush=True)
 
 
 def run_full_scraper(max_pages=50):  # Reduced default batch size to avoid long exposure
@@ -60,15 +60,15 @@ def run_full_scraper(max_pages=50):  # Reduced default batch size to avoid long 
                 else "https://sa.aqar.fm/en/all/riyadh"
             )
 
-            print(f"Scraping Page {page_num} of {max_pages}: {target_url}...")
+            print(f"Scraping Page {page_num} of {max_pages}: {target_url}...", flush=True)
             
             try:
                 page.goto(target_url, wait_until="domcontentloaded", timeout=45000)
                 
-                print(f"   -> Page Title: {page.title()}")
+                print(f"   -> Page Title: {page.title()}", flush=True)
                 
                 if "blocked" in page.title().lower() or "حظر" in page.title():
-                    print("🚨 Block detected by title! Pausing for 30 seconds to cool down...")
+                    print("🚨 Block detected by title! Pausing for 30 seconds to cool down...", flush=True)
                     time.sleep(30)
                     continue
 
@@ -79,12 +79,12 @@ def run_full_scraper(max_pages=50):  # Reduced default batch size to avoid long 
                 
                 page.wait_for_selector('a[href*="/riyadh/"]', timeout=15000)
             except Exception as e:
-                print(f"⚠️ Timeout or network issue on page {page_num}. Skipping... Error: {e}")
+                print(f"⚠️️ Timeout or network issue on page {page_num}. Skipping... Error: {e}", flush=True)
                 continue
 
             # Heavy human-like delay between pages (10 to 20 seconds)
             sleep_time = random.uniform(10.0, 20.0)
-            print(f"⏳ Waiting {sleep_time:.1f}s to mimic human reading pattern...")
+            print(f"⏳ Waiting {sleep_time:.1f}s to mimic human reading pattern...", flush=True)
             time.sleep(sleep_time)
 
             listing_links = page.locator('a[href*="/riyadh/"]').all()
@@ -142,14 +142,14 @@ def run_full_scraper(max_pages=50):  # Reduced default batch size to avoid long 
                 except Exception:
                     continue
 
-            print(f"   -> Captured {page_count} items from page {page_num}.")
+            print(f"   -> Captured {page_count} items from page {page_num}.", flush=True)
 
             if page_num % 5 == 0 and batch_listings:
                 save_checkpoint(batch_listings, output_filename)
                 batch_listings = []
 
             if page_num % 10 == 0:
-                print("☕ Taking an extended 30-second breather to remain completely undetected...")
+                print("☕ Taking an extended 30-second breather to remain completely undetected...", flush=True)
                 time.sleep(30)
 
         if batch_listings:
@@ -157,15 +157,15 @@ def run_full_scraper(max_pages=50):  # Reduced default batch size to avoid long 
 
         browser.close()
 
-    print("\n🎉 Scraping session complete!")
+    print("\n🎉 Scraping session complete!", flush=True)
 
 
 if __name__ == "__main__":
-    run_full_scraper(max_pages=50) # Start testing with 50 pages first
+    run_full_scraper(max_pages=50)
 
     if os.path.isfile("riyadh_raw_listings.csv"):
         df = pd.read_csv("riyadh_raw_listings.csv")
         if not df.empty:
             df = df.drop_duplicates(subset=["link"])
             df.to_csv("riyadh_raw_listings.csv", index=False, encoding="utf-8-sig")
-            print(f"🧹 Cleaned duplicates. Final unique dataset size: {len(df)} rows.")
+            print(f"🧹 Cleaned duplicates. Final unique dataset size: {len(df)} rows.", flush=True)
