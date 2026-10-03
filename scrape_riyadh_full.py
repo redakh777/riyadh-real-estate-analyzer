@@ -27,6 +27,11 @@ def run_full_scraper(max_pages=50):
         os.remove(output_filename)
 
     API_KEY = os.getenv("SCRAPER_API_KEY")
+    
+    # Strict check for CI/CD environments (GitHub Actions)
+    if not API_KEY and os.getenv("GITHUB_ACTIONS"):
+        raise ValueError("❌ CRITICAL ERROR: SCRAPER_API_KEY secret is missing in GitHub Actions!")
+
     session = cf_requests.Session(impersonate="chrome124")
     batch_listings = []
 
@@ -45,9 +50,10 @@ def run_full_scraper(max_pages=50):
             print(f"\n--- Scraping Page {page_num} (Attempt #{attempts}): {target_url} ---", flush=True)
 
             try:
-                # Routes through your scraper API if available, otherwise runs direct
+                # If API key is present, route through ScraperAPI with Saudi geo-targeting
                 if API_KEY:
-                    fetch_url = f"http://api.scraperapi.com?api_key={API_KEY}&url={target_url}"
+                    # country_code=sa ensures the request appears to originate from Saudi Arabia, avoiding regional blocks
+                    fetch_url = f"http://api.scraperapi.com?api_key={API_KEY}&country_code=sa&url={target_url}"
                 else:
                     fetch_url = target_url
 
@@ -57,13 +63,12 @@ def run_full_scraper(max_pages=50):
                     "Connection": "keep-alive",
                 }
 
-                response = session.get(fetch_url, headers=headers, timeout=45)
+                response = session.get(fetch_url, headers=headers, timeout=60)
                 print(f"   -> Status Code: {response.status_code}", flush=True)
 
-                # Rely strictly on status codes to catch blocks instead of generic text matches
                 if response.status_code in [403, 401, 503]:
                     print(f"🚨 Block triggered on Page {page_num}!", flush=True)
-                    backoff = 10 * attempts
+                    backoff = 15 * attempts
                     print(f"💤 Sleeping for {backoff}s before retrying...", flush=True)
                     time.sleep(backoff)
                     continue
@@ -145,7 +150,7 @@ def run_full_scraper(max_pages=50):
             batch_listings = []
             time.sleep(3.0)
 
-        sleep_time = random.uniform(1.0, 3.0)
+        sleep_time = random.uniform(2.0, 4.0)
         print(f"⏳ Resting {sleep_time:.1f}s...", flush=True)
         time.sleep(sleep_time)
 
