@@ -85,7 +85,9 @@ def run_full_scraper(max_pages=50):
                     if "blocked" in title.lower() or "حظر" in title:
                         print(f"🚨 Block detected on attempt {attempt}! Discarding context, backing off...", flush=True)
                         browser.close()
-                        time.sleep(30 * attempt)  # Progressive backoff: 30s, 60s, 90s
+                        backoff_time = 45 * attempt  # 45s, 90s, 135s progressive backoff
+                        print(f"💤 Sleeping for {backoff_time}s to clear block...", flush=True)
+                        time.sleep(backoff_time)
                         continue
 
                     # Simulate human mouse movement and scrolling
@@ -165,10 +167,12 @@ def run_full_scraper(max_pages=50):
             if not success:
                 print(f"❌ Failed to scrape page {page_num} after {retries} attempts. Moving on.", flush=True)
 
-            # Checkpoint increment every 5 pages
+            # Checkpoint increment every 5 pages + Deep Cool-down
             if page_num % 5 == 0 and batch_listings:
                 save_checkpoint(batch_listings, output_filename)
                 batch_listings = []
+                print("☕ Taking a 30s deep breath to reset Cloudflare rate-limits...", flush=True)
+                time.sleep(30.0)
 
             # Randomized human delay between page loads (10 to 18 seconds)
             sleep_time = random.uniform(10.0, 18.0)
