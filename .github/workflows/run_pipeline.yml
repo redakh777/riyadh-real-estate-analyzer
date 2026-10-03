@@ -24,7 +24,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Install Playwright Browsers & Dependencies
-        uses: microsoft/playwright-github-action@v4
+        uses: microsoft/playwright-github-action@v1
 
       - name: Run Web Scraper
         run: python scrape_riyadh_full.py
