@@ -4,23 +4,17 @@ import time
 import re
 import pandas as pd
 from playwright.sync_api import sync_playwright
-
-try:
-    from playwright_stealth import Stealth
-    STEALTH_VERSION = "v2"
-except ImportError:
-    try:
-        from playwright_stealth import stealth_sync
-        STEALTH_VERSION = "v1"
-    except ImportError:
-        STEALTH_VERSION = None
+from playwright_stealth import Stealth
 
 
 def save_checkpoint(new_listings, filename="riyadh_raw_listings.csv"):
+    """Appends new batch listings safely to CSV without overwriting previous pages."""
     if not new_listings:
         return
+
     df = pd.DataFrame(new_listings)
     file_exists = os.path.isfile(filename)
+
     df.to_csv(
         filename,
         mode="a" if file_exists else "w",
@@ -40,15 +34,11 @@ def run_full_scraper(max_pages=50):
     user_agents = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0"
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     ]
 
-    if STEALTH_VERSION == "v2":
-        playwright_cm = Stealth().use_sync(sync_playwright())
-    else:
-        playwright_cm = sync_playwright()
-
-    with playwright_cm as p:
+    with Stealth().use_sync(sync_playwright()) as p:
         batch_listings = []
 
         for page_num in range(1, max_pages + 1):
@@ -61,12 +51,11 @@ def run_full_scraper(max_pages=50):
             success = False
             total_page_attempts = 0
 
+            # Infinite retry loop until the page successfully yields results
             while not success:
                 total_page_attempts += 1
-                print(f"\n--- Scraping Page {page_num} (Attempt #{total_page_attempts}): {target_url} ---", flush=True)
+                print(f"\n--- Scraping Page {page_num} (Total Attempt #{total_page_attempts}): {target_url} ---", flush=True)
                 
-                # Cloudflare flags standard headless flags instantly; keeping headless=True 
-                # with explicit anti-detection args helps avoid standard triggers.
                 browser = p.chromium.launch(
                     headless=True,
                     args=[
@@ -75,55 +64,40 @@ def run_full_scraper(max_pages=50):
                         "--no-sandbox",
                         "--disable-setuid-sandbox",
                         "--disable-dev-shm-usage",
-                        "--disable-infobars",
-                        "--window-size=1920,1080",
                     ],
                 )
 
                 context = browser.new_context(
                     user_agent=random.choice(user_agents),
                     locale="en-US",
-                    timezone_id="Asia/Riyadh",
                     viewport={"width": 1920, "height": 1080},
                     device_scale_factor=1,
-                    extra_http_headers={
-                        "Accept-Language": "en-US,en;q=0.9,ar;q=0.8",
-                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                        "Connection": "keep-alive",
-                        "Upgrade-Insecure-Requests": "1"
-                    }
                 )
 
-                # Hard override for navigator.webdriver property which Cloudflare looks for
-                context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-
                 page = context.new_page()
-                
-                if STEALTH_VERSION == "v1":
-                    stealth_sync(page)
 
                 try:
-                    # Use networkidle to make sure Cloudflare challenge scripts fully execute
-                    page.goto(target_url, wait_until="networkidle", timeout=45000)
+                    page.goto(target_url, wait_until="domcontentloaded", timeout=45000)
                     
                     title = page.title()
                     print(f"   -> Page Title: {title}", flush=True)
                     
-                    if "blocked" in title.lower() or "حظر" in title or "cloudflare" in title.lower():
-                        print(f"🚨 Cloudflare block detected on Page {page_num}! Changing identity...", flush=True)
+                    if "blocked" in title.lower() or "حظر" in title:
+                        print(f"🚨 Block detected on Page {page_num}! Discarding context...", flush=True)
                         browser.close()
                         
-                        backoff = min(15 * total_page_attempts, 60)
-                        print(f"💤 Backing off: Sleeping for {backoff}s...", flush=True)
+                        # Scale backoff based on how many tries this page has taken
+                        backoff = min(30 * total_page_attempts, 180)
+                        print(f"💤 Persistent block guard: Sleeping for {backoff}s before retrying Page {page_num}...", flush=True)
                         time.sleep(backoff)
                         continue
 
-                    # Mimic natural user activity
-                    page.mouse.move(random.randint(200, 600), random.randint(200, 500))
+                    # Simulate human mouse movement and scrolling
+                    page.mouse.move(random.randint(200, 700), random.randint(200, 700))
                     page.evaluate("window.scrollBy(0, window.innerHeight / 1.5)")
-                    page.wait_for_timeout(random.randint(2000, 4000))
+                    page.wait_for_timeout(random.randint(4000, 7000))
                     
-                    page.wait_for_selector('a[href*="/riyadh/"]', timeout=12000)
+                    page.wait_for_selector('a[href*="/riyadh/"]', timeout=15000)
 
                     listing_links = page.locator('a[href*="/riyadh/"]').all()
                     page_count = 0
@@ -190,21 +164,24 @@ def run_full_scraper(max_pages=50):
                 except Exception as e:
                     print(f"⚠️ Error on Page {page_num}: {e}. Retrying...", flush=True)
                     browser.close()
-                    time.sleep(8)
+                    time.sleep(20)
 
-            if page_num % 10 == 0 and batch_listings:
+            # Checkpoint increment every 5 pages
+            if page_num % 5 == 0 and batch_listings:
                 save_checkpoint(batch_listings, output_filename)
                 batch_listings = []
-                time.sleep(10.0)
+                print("☕ Checkpoint reached. Pausing 30s...", flush=True)
+                time.sleep(30.0)
 
-            sleep_time = random.uniform(5.0, 9.0)
+            # Safe human-like delay between pages
+            sleep_time = random.uniform(16.0, 26.0)
             print(f"⏳ Resting {sleep_time:.1f}s before next page...", flush=True)
             time.sleep(sleep_time)
 
         if batch_listings:
             save_checkpoint(batch_listings, output_filename)
 
-    print("\n🎉 High-speed scraping session complete!", flush=True)
+    print("\n🎉 Scraping session complete!", flush=True)
 
 
 if __name__ == "__main__":
