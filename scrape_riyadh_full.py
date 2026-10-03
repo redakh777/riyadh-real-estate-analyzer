@@ -31,7 +31,6 @@ def run_full_scraper(max_pages=50):
     if os.path.isfile(output_filename):
         os.remove(output_filename)
 
-    # List of realistic user agents to rotate
     user_agents = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
@@ -41,6 +40,7 @@ def run_full_scraper(max_pages=50):
 
     with sync_playwright() as p:
         batch_listings = []
+        consecutive_blocks = 0
 
         for page_num in range(1, max_pages + 1):
             target_url = (
@@ -55,6 +55,7 @@ def run_full_scraper(max_pages=50):
             for attempt in range(1, retries + 1):
                 print(f"\n--- Scraping Page {page_num} (Attempt {attempt}/{retries}): {target_url} ---", flush=True)
                 
+                # Fresh browser instance per attempt to completely reset fingerprints
                 browser = p.chromium.launch(
                     headless=True,
                     args=[
@@ -83,17 +84,28 @@ def run_full_scraper(max_pages=50):
                     print(f"   -> Page Title: {title}", flush=True)
                     
                     if "blocked" in title.lower() or "حظر" in title:
-                        print(f"🚨 Block detected on attempt {attempt}! Discarding context, backing off...", flush=True)
+                        consecutive_blocks += 1
+                        print(f"🚨 Block detected! (Consecutive block count: {consecutive_blocks})", flush=True)
                         browser.close()
-                        backoff_time = 45 * attempt  # 45s, 90s, 135s progressive backoff
-                        print(f"💤 Sleeping for {backoff_time}s to clear block...", flush=True)
-                        time.sleep(backoff_time)
+                        
+                        # If Cloudflare is heavily throttling us, trigger a heavy cool-down
+                        if consecutive_blocks >= 2:
+                            cooldown = 60 * consecutive_blocks
+                            print(f"🛑 High block frequency detected. Deep cooling down for {cooldown}s...", flush=True)
+                            time.sleep(cooldown)
+                        else:
+                            backoff_time = 30 * attempt
+                            print(f"💤 Backing off for {backoff_time}s...", flush=True)
+                            time.sleep(backoff_time)
                         continue
 
+                    # Reset consecutive blocks on success
+                    consecutive_blocks = 0
+
                     # Simulate human mouse movement and scrolling
-                    page.mouse.move(random.randint(150, 600), random.randint(150, 600))
+                    page.mouse.move(random.randint(200, 700), random.randint(200, 700))
                     page.evaluate("window.scrollBy(0, window.innerHeight / 1.5)")
-                    page.wait_for_timeout(random.randint(3000, 6000))
+                    page.wait_for_timeout(random.randint(4000, 7000))
                     
                     page.wait_for_selector('a[href*="/riyadh/"]', timeout=15000)
 
@@ -157,7 +169,7 @@ def run_full_scraper(max_pages=50):
                     print(f"   -> Successfully captured {page_count} items from page {page_num}.", flush=True)
                     success = True
                     browser.close()
-                    break  # Exit retry loop on success
+                    break
 
                 except Exception as e:
                     print(f"⚠️ Error on page {page_num} attempt {attempt}: {e}", flush=True)
@@ -167,15 +179,15 @@ def run_full_scraper(max_pages=50):
             if not success:
                 print(f"❌ Failed to scrape page {page_num} after {retries} attempts. Moving on.", flush=True)
 
-            # Checkpoint increment every 5 pages + Deep Cool-down
+            # Checkpoint increment every 5 pages
             if page_num % 5 == 0 and batch_listings:
                 save_checkpoint(batch_listings, output_filename)
                 batch_listings = []
-                print("☕ Taking a 30s deep breath to reset Cloudflare rate-limits...", flush=True)
+                print("☕ Checkpoint reached. Pausing 30s to stay under rate limits...", flush=True)
                 time.sleep(30.0)
 
-            # Randomized human delay between page loads (10 to 18 seconds)
-            sleep_time = random.uniform(10.0, 18.0)
+            # Safe human-like delay between pages (16 to 26 seconds to avoid sliding window triggers)
+            sleep_time = random.uniform(16.0, 26.0)
             print(f"⏳ Resting {sleep_time:.1f}s before next page...", flush=True)
             time.sleep(sleep_time)
 
