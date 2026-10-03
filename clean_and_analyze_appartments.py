@@ -8,7 +8,7 @@ import seaborn as sns
 sns.set_theme(style="whitegrid")
 plt.rcParams.update({'font.sans-serif': 'DejaVu Sans', 'figure.autolayout': True})
 
-def clean_and_analyze(input_file="riyadh_raw_listings.csv", output_file="riyadh_district_price_analysis.csv", cleaned_output_file="riyadh_cleaned_listings.csv"):
+def clean_and_analyze(input_file="riyadh_raw_listings.csv", output_file="riyadh_district_apartment_analysis.csv", cleaned_output_file="riyadh_cleaned_apartments.csv"):
     if not os.path.isfile(input_file):
         print(f"❌ Error: {input_file} not found! Make sure the scraper has finished or the file exists.")
         return
@@ -38,34 +38,43 @@ def clean_and_analyze(input_file="riyadh_raw_listings.csv", output_file="riyadh_
 
     df['district'] = df.apply(extract_district, axis=1)
 
-    # 3. Clean numeric columns safely & filter out anomalies
+    # 3. Filter strictly for Apartments (checking both English & Arabic listing indicators)
+    print("🏠 Filtering specifically for apartments...")
+    def is_apartment(row):
+        text_blob = f"{str(row.get('raw_info', ''))} {str(row.get('title', ''))}".lower()
+        # Checks for English apartment keywords or Arabic equivalents (شقة / شقق)
+        return bool(re.search(r'apartment|flat|شقة|شقق', text_blob))
+
+    # Apply the apartment filter
+    df = df[df.apply(is_apartment, axis=1)].copy()
+    print(f"   -> Found {len(df)} apartment-specific listings after filtering.")
+
+    # 4. Clean numeric columns safely & filter out anomalies
     print("🧹 Cleaning numeric bounds and outliers...")
     df['price_clean'] = pd.to_numeric(df['price_sar'], errors='coerce')
     df['area_clean'] = pd.to_numeric(df['area_sqm'], errors='coerce')
 
     df = df.dropna(subset=['price_clean', 'area_clean']).copy()
-    df = df[(df['area_clean'] >= 10) & (df['area_clean'] <= 100000)]
-    df = df[df['price_clean'] >= 1000]
+    # Apartments usually range between 50 sqm and 500 sqm
+    df = df[(df['area_clean'] >= 30) & (df['area_clean'] <= 600)]
+    df = df[df['price_clean'] >= 10000]
 
     if len(df) == 0:
-        print("⚠️ Warning: No valid rows passed the cleaning filters.")
+        print("⚠️ Warning: No valid apartment rows passed the cleaning filters.")
         return
 
-    print(f"   -> Processing {len(df)} valid property listings...")
-
-    # 4. Feature Engineering: Price per Square Meter
+    # 5. Feature Engineering: Price per Square Meter
     df['sar_per_sqm'] = df['price_clean'] / df['area_clean']
 
-    # Map back standard column names for the cleaned dataset export
     df['price_sar'] = df['price_clean']
     df['area_sqm'] = df['area_clean']
     df['price_per_sqm'] = df['sar_per_sqm']
 
-    # Save master cleaned dataset
+    # Save master cleaned apartment dataset
     df.to_csv(cleaned_output_file, index=False, encoding="utf-8-sig")
-    print(f"💾 Cleaned master dataset saved to {cleaned_output_file}")
+    print(f"💾 Cleaned apartment dataset saved to {cleaned_output_file}")
 
-    # 5. Group by District and aggregate statistics (Matching your exact schema)
+    # 6. Group by District and aggregate statistics for apartments
     summary = df.groupby('district').agg(
         total_listings=('sar_per_sqm', 'count'),
         avg_price_sar=('price_clean', 'mean'),
@@ -77,32 +86,29 @@ def clean_and_analyze(input_file="riyadh_raw_listings.csv", output_file="riyadh_
     summary = summary.round(2).sort_values(by='total_listings', ascending=False)
     summary.to_csv(output_file, index=False, encoding="utf-8-sig")
 
-    print(f"\n📊 Summary Statistics & District Analysis saved to {output_file}:")
+    print(f"\n📊 Apartment District Analysis saved to {output_file}:")
     print(summary.head(10).to_string(index=False))
 
-    # 6. Generating Visualizations for your GitHub README
-    print("\n📈 Generating portfolio visualization charts...")
+    # 7. Generating Visualizations for Apartments
+    print("\n📈 Generating apartment portfolio visualization charts...")
 
-    # Chart 1: Price Distribution Histogram (Excluding Top 5% Outliers for readability)
     plt.figure(figsize=(10, 6))
     price_cap = df["price_clean"].quantile(0.95)
     sns.histplot(df[df["price_clean"] <= price_cap]["price_clean"], kde=True, color="teal")
-    plt.title("Riyadh Real Estate Price Distribution (Excl. Top 5% Outliers)", fontsize=14, fontweight="bold")
+    plt.title("Riyadh Apartment Price Distribution", fontsize=14, fontweight="bold")
     plt.xlabel("Price (SAR)", fontsize=12)
     plt.ylabel("Number of Listings", fontsize=12)
-    plt.savefig("riyadh_price_distribution.png", dpi=300)
+    plt.savefig("riyadh_apartment_price_distribution.png", dpi=300)
     plt.close()
 
-    # Chart 2: Top Districts by Average Price Bar Chart (Filtering for sample size >= 2)
     top_districts = summary[summary["total_listings"] >= 2].sort_values(by="avg_price_sar", ascending=False).head(10)
 
     plt.figure(figsize=(12, 6))
     ax = sns.barplot(data=top_districts, x="avg_price_sar", y="district", palette="viridis")
-    plt.title("Top Districts in Riyadh by Average Price", fontsize=14, fontweight="bold")
+    plt.title("Top Districts in Riyadh by Average Apartment Price", fontsize=14, fontweight="bold")
     plt.xlabel("Average Price (SAR)", fontsize=12)
     plt.ylabel("District", fontsize=12)
     
-    # Annotate values on bars
     for p in ax.patches:
         width = p.get_width()
         if width > 0:
@@ -111,11 +117,11 @@ def clean_and_analyze(input_file="riyadh_raw_listings.csv", output_file="riyadh_
                         xytext=(5, 0), textcoords="offset points",
                         ha="left", va="center", fontsize=9, fontweight="bold")
 
-    plt.savefig("riyadh_top_districts.png", dpi=300)
+    plt.savefig("riyadh_top_apartment_districts.png", dpi=300)
     plt.close()
 
-    print("🖼️ Charts successfully generated and saved: 'riyadh_price_distribution.png' & 'riyadh_top_districts.png'")
-    print("\n✨ Pipeline Complete! All datasets and visual assets ready for GitHub.")
+    print("🖼️ Charts successfully generated and saved: 'riyadh_apartment_price_distribution.png' & 'riyadh_top_apartment_districts.png'")
+    print("\n✨ Pipeline Complete! Apartment data ready.")
 
 if __name__ == "__main__":
     clean_and_analyze()

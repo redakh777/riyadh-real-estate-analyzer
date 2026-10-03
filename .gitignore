@@ -8,3 +8,4 @@ scrape_playwright_direct.py
 venv/
 __pycache__/
 *.pyc
+riyadh_raw_listings.csv
