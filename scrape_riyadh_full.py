@@ -26,7 +26,7 @@ def run_full_scraper(max_pages=50):
     if os.path.isfile(output_filename):
         os.remove(output_filename)
 
-    # Use environment variable with a robust fallback to ensure it never crashes on GitHub Actions
+    # Use environment variable with fallback API key
     API_KEY = os.getenv("SCRAPER_API_KEY") or "12ebdc20659273de164b84c57b0e51db"
 
     session = cf_requests.Session(impersonate="chrome124")
@@ -47,9 +47,9 @@ def run_full_scraper(max_pages=50):
             print(f"\n--- Scraping Page {page_num} (Attempt #{attempts}): {target_url} ---", flush=True)
 
             try:
-                # Route through ScraperAPI with Saudi geo-targeting to bypass cloud center blocks
+                # Route through ScraperAPI with Saudi geo-targeting AND JS rendering enabled to fix 500 errors
                 if API_KEY:
-                    fetch_url = f"http://api.scraperapi.com?api_key={API_KEY}&country_code=sa&url={target_url}"
+                    fetch_url = f"http://api.scraperapi.com?api_key={API_KEY}&country_code=sa&render=true&url={target_url}"
                 else:
                     fetch_url = target_url
 
@@ -59,11 +59,12 @@ def run_full_scraper(max_pages=50):
                     "Connection": "keep-alive",
                 }
 
-                response = session.get(fetch_url, headers=headers, timeout=60)
+                # Increased timeout to 90 seconds because JS rendering takes slightly longer
+                response = session.get(fetch_url, headers=headers, timeout=90)
                 print(f"   -> Status Code: {response.status_code}", flush=True)
 
-                if response.status_code in [403, 401, 503]:
-                    print(f"🚨 Block triggered on Page {page_num}!", flush=True)
+                if response.status_code in [403, 401, 500, 503]:
+                    print(f"🚨 Block/Server error triggered on Page {page_num} (Status {response.status_code})!", flush=True)
                     backoff = 15 * attempts
                     print(f"💤 Sleeping for {backoff}s before retrying...", flush=True)
                     time.sleep(backoff)
