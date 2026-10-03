@@ -4,7 +4,7 @@ import time
 import re
 import pandas as pd
 from playwright.sync_api import sync_playwright
-from playwright_stealth import stealth_sync
+from playwright_stealth import Stealth  # Updated v2.x import
 
 
 def save_checkpoint(new_listings, filename="riyadh_raw_listings.csv"):
@@ -38,7 +38,8 @@ def run_full_scraper(max_pages=50):
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     ]
 
-    with sync_playwright() as p:
+    # Use the v2.x Stealth context manager to wrap playwright
+    with Stealth().use_sync(sync_playwright()) as p:
         batch_listings = []
         consecutive_blocks = 0
 
@@ -55,7 +56,6 @@ def run_full_scraper(max_pages=50):
             for attempt in range(1, retries + 1):
                 print(f"\n--- Scraping Page {page_num} (Attempt {attempt}/{retries}): {target_url} ---", flush=True)
                 
-                # Fresh browser instance per attempt to completely reset fingerprints
                 browser = p.chromium.launch(
                     headless=True,
                     args=[
@@ -75,7 +75,6 @@ def run_full_scraper(max_pages=50):
                 )
 
                 page = context.new_page()
-                stealth_sync(page)
 
                 try:
                     page.goto(target_url, wait_until="domcontentloaded", timeout=45000)
@@ -88,7 +87,6 @@ def run_full_scraper(max_pages=50):
                         print(f"🚨 Block detected! (Consecutive block count: {consecutive_blocks})", flush=True)
                         browser.close()
                         
-                        # If Cloudflare is heavily throttling us, trigger a heavy cool-down
                         if consecutive_blocks >= 2:
                             cooldown = 60 * consecutive_blocks
                             print(f"🛑 High block frequency detected. Deep cooling down for {cooldown}s...", flush=True)
@@ -99,7 +97,6 @@ def run_full_scraper(max_pages=50):
                             time.sleep(backoff_time)
                         continue
 
-                    # Reset consecutive blocks on success
                     consecutive_blocks = 0
 
                     # Simulate human mouse movement and scrolling
@@ -179,14 +176,12 @@ def run_full_scraper(max_pages=50):
             if not success:
                 print(f"❌ Failed to scrape page {page_num} after {retries} attempts. Moving on.", flush=True)
 
-            # Checkpoint increment every 5 pages
             if page_num % 5 == 0 and batch_listings:
                 save_checkpoint(batch_listings, output_filename)
                 batch_listings = []
                 print("☕ Checkpoint reached. Pausing 30s to stay under rate limits...", flush=True)
                 time.sleep(30.0)
 
-            # Safe human-like delay between pages (16 to 26 seconds to avoid sliding window triggers)
             sleep_time = random.uniform(16.0, 26.0)
             print(f"⏳ Resting {sleep_time:.1f}s before next page...", flush=True)
             time.sleep(sleep_time)
