@@ -3,18 +3,14 @@ import random
 import time
 import re
 import pandas as pd
-from playwright.sync_api import sync_playwright
-from playwright_stealth import Stealth
-
+from bs4 import BeautifulSoup
+from curl_cffi import requests as cf_requests
 
 def save_checkpoint(new_listings, filename="riyadh_raw_listings.csv"):
-    """Appends new batch listings safely to CSV without overwriting previous pages."""
     if not new_listings:
         return
-
     df = pd.DataFrame(new_listings)
     file_exists = os.path.isfile(filename)
-
     df.to_csv(
         filename,
         mode="a" if file_exists else "w",
@@ -24,165 +20,134 @@ def save_checkpoint(new_listings, filename="riyadh_raw_listings.csv"):
     )
     print(f"💾 Checkpoint saved: Appended {len(df)} records to {filename}", flush=True)
 
-
 def run_full_scraper(max_pages=50):
     output_filename = "riyadh_raw_listings.csv"
 
     if os.path.isfile(output_filename):
         os.remove(output_filename)
 
-    user_agents = [
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-    ]
+    # Use curl_cffi session with explicit Chrome TLS fingerprint impersonation
+    session = cf_requests.Session(impersonate="chrome124")
+    batch_listings = []
 
-    with Stealth().use_sync(sync_playwright()) as p:
-        batch_listings = []
+    for page_num in range(1, max_pages + 1):
+        target_url = (
+            f"https://sa.aqar.fm/en/all/riyadh/{page_num}"
+            if page_num > 1
+            else "https://sa.aqar.fm/en/all/riyadh"
+        )
 
-        for page_num in range(1, max_pages + 1):
-            target_url = (
-                f"https://sa.aqar.fm/en/all/riyadh/{page_num}"
-                if page_num > 1
-                else "https://sa.aqar.fm/en/all/riyadh"
-            )
+        success = False
+        attempts = 0
 
-            success = False
-            total_page_attempts = 0
+        while not success and attempts < 5:
+            attempts += 1
+            print(f"\n--- Scraping Page {page_num} (Attempt #{attempts}): {target_url} ---", flush=True)
 
-            # Infinite retry loop until the page successfully yields results
-            while not success:
-                total_page_attempts += 1
-                print(f"\n--- Scraping Page {page_num} (Total Attempt #{total_page_attempts}): {target_url} ---", flush=True)
+            try:
+                headers = {
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                    "Accept-Language": "en-US,en;q=0.9,ar;q=0.8",
+                    "Referer": "https://sa.aqar.fm/",
+                    "Connection": "keep-alive",
+                }
+
+                response = session.get(target_url, headers=headers, timeout=30)
+                print(f"   -> Status Code: {response.status_code}", flush=True)
+
+                if response.status_code == 403 or "blocked" in response.text.lower() or "حظر" in response.text:
+                    print(f"🚨 Cloudflare block triggered on Page {page_num}!", flush=True)
+                    backoff = 15 * attempts
+                    print(f"💤 Sleeping for {backoff}s before retrying...", flush=True)
+                    time.sleep(backoff)
+                    continue
+
+                if response.status_code != 200:
+                    print(f"⚠️ Unexpected status code: {response.status_code}. Retrying...", flush=True)
+                    time.sleep(5)
+                    continue
+
+                # Parse HTML with BeautifulSoup
+                soup = BeautifulSoup(response.text, "html.parser")
+                listing_links = soup.select('a[href*="/riyadh/"]')
                 
-                browser = p.chromium.launch(
-                    headless=True,
-                    args=[
-                        "--disable-blink-features=AutomationControlled",
-                        "--start-maximized",
-                        "--no-sandbox",
-                        "--disable-setuid-sandbox",
-                        "--disable-dev-shm-usage",
-                    ],
-                )
+                page_count = 0
+                page_listings = []
 
-                context = browser.new_context(
-                    user_agent=random.choice(user_agents),
-                    locale="en-US",
-                    viewport={"width": 1920, "height": 1080},
-                    device_scale_factor=1,
-                )
+                for link in listing_links:
+                    try:
+                        raw_text = link.get_text(strip=True)
+                        href = link.get("href")
 
-                page = context.new_page()
-
-                try:
-                    page.goto(target_url, wait_until="domcontentloaded", timeout=45000)
-                    
-                    title = page.title()
-                    print(f"   -> Page Title: {title}", flush=True)
-                    
-                    if "blocked" in title.lower() or "حظر" in title:
-                        print(f"🚨 Block detected on Page {page_num}! Discarding context...", flush=True)
-                        browser.close()
-                        
-                        # Scale backoff based on how many tries this page has taken
-                        backoff = min(30 * total_page_attempts, 180)
-                        print(f"💤 Persistent block guard: Sleeping for {backoff}s before retrying Page {page_num}...", flush=True)
-                        time.sleep(backoff)
-                        continue
-
-                    # Simulate human mouse movement and scrolling
-                    page.mouse.move(random.randint(200, 700), random.randint(200, 700))
-                    page.evaluate("window.scrollBy(0, window.innerHeight / 1.5)")
-                    page.wait_for_timeout(random.randint(4000, 7000))
-                    
-                    page.wait_for_selector('a[href*="/riyadh/"]', timeout=15000)
-
-                    listing_links = page.locator('a[href*="/riyadh/"]').all()
-                    page_count = 0
-                    page_listings = []
-
-                    for link in listing_links:
-                        try:
-                            raw_text = link.text_content().strip()
-                            href = link.get_attribute("href")
-
-                            if not raw_text or not href:
-                                continue
-
-                            price_match = re.search(
-                                r"(?:SAR|SR|\b)\s*([\d,]+)\s*(?:SAR|SR|\b)", raw_text
-                            )
-                            price = (
-                                int(price_match.group(1).replace(",", ""))
-                                if price_match
-                                else None
-                            )
-
-                            area_match = re.search(
-                                r"([\d,]+)\s*(?:sqm|m²|m2)", raw_text, re.IGNORECASE
-                            )
-                            area = (
-                                float(area_match.group(1).replace(",", ""))
-                                if area_match
-                                else None
-                            )
-
-                            district = "Riyadh"
-                            path_parts = href.strip("/").split("/")
-                            if len(path_parts) >= 2:
-                                district_slug = path_parts[1].replace("-", " ").title()
-                                if district_slug.lower() not in [
-                                    "all",
-                                    "properties",
-                                    "real-estate",
-                                ]:
-                                    district = district_slug
-
-                            page_listings.append(
-                                {
-                                    "district": district,
-                                    "price_sar": price,
-                                    "area_sqm": area,
-                                    "raw_info": raw_text,
-                                    "link": f"https://sa.aqar.fm{href}"
-                                    if href.startswith("/")
-                                    else href,
-                                }
-                            )
-                            page_count += 1
-                        except Exception:
+                        if not raw_text or not href:
                             continue
 
-                    batch_listings.extend(page_listings)
-                    print(f"   -> ✅ Successfully captured {page_count} items from page {page_num}.", flush=True)
-                    success = True
-                    browser.close()
-                    break
+                        price_match = re.search(
+                            r"(?:SAR|SR|\b)\s*([\d,]+)\s*(?:SAR|SR|\b)", raw_text
+                        )
+                        price = (
+                            int(price_match.group(1).replace(",", ""))
+                            if price_match
+                            else None
+                        )
 
-                except Exception as e:
-                    print(f"⚠️ Error on Page {page_num}: {e}. Retrying...", flush=True)
-                    browser.close()
-                    time.sleep(20)
+                        area_match = re.search(
+                            r"([\d,]+)\s*(?:sqm|m²|m2)", raw_text, re.IGNORECASE
+                        )
+                        area = (
+                            float(area_match.group(1).replace(",", ""))
+                            if area_match
+                            else None
+                        )
 
-            # Checkpoint increment every 5 pages
-            if page_num % 5 == 0 and batch_listings:
-                save_checkpoint(batch_listings, output_filename)
-                batch_listings = []
-                print("☕ Checkpoint reached. Pausing 30s...", flush=True)
-                time.sleep(30.0)
+                        district = "Riyadh"
+                        path_parts = href.strip("/").split("/")
+                        if len(path_parts) >= 2:
+                            district_slug = path_parts[1].replace("-", " ").title()
+                            if district_slug.lower() not in [
+                                "all",
+                                "properties",
+                                "real-estate",
+                            ]:
+                                district = district_slug
 
-            # Safe human-like delay between pages
-            sleep_time = random.uniform(16.0, 26.0)
-            print(f"⏳ Resting {sleep_time:.1f}s before next page...", flush=True)
-            time.sleep(sleep_time)
+                        page_listings.append(
+                            {
+                                "district": district,
+                                "price_sar": price,
+                                "area_sqm": area,
+                                "raw_info": raw_text,
+                                "link": f"https://sa.aqar.fm{href}"
+                                if href.startswith("/")
+                                else href,
+                            }
+                        )
+                        page_count += 1
+                    except Exception:
+                        continue
 
-        if batch_listings:
+                batch_listings.extend(page_listings)
+                print(f"   -> ✅ Successfully captured {page_count} items from page {page_num}.", flush=True)
+                success = True
+                break
+
+            except Exception as e:
+                print(f"⚠️ Connection error on Page {page_num}: {e}. Retrying...", flush=True)
+                time.sleep(10)
+
+        if page_num % 10 == 0 and batch_listings:
             save_checkpoint(batch_listings, output_filename)
+            batch_listings = []
+            time.sleep(5.0)
+
+        sleep_time = random.uniform(3.0, 6.0)
+        print(f"⏳ Resting {sleep_time:.1f}s...", flush=True)
+        time.sleep(sleep_time)
+
+    if batch_listings:
+        save_checkpoint(batch_listings, output_filename)
 
     print("\n🎉 Scraping session complete!", flush=True)
-
 
 if __name__ == "__main__":
     run_full_scraper(max_pages=50)
@@ -192,4 +157,4 @@ if __name__ == "__main__":
         if not df.empty:
             df = df.drop_duplicates(subset=["link"])
             df.to_csv("riyadh_raw_listings.csv", index=False, encoding="utf-8-sig")
-            print(f"🧹 Cleaned duplicates. Final unique dataset size: {len(df)} rows.", flush=True)
+            print(f"🧹 Cleaned duplicates. Final dataset size: {len(df)} rows.", flush=True)
