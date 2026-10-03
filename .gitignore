@@ -1,10 +1,10 @@
-# Virtual environment
-venv/
-env/
+# Ignore old/experimental scraper scripts
+scrape_properties.py
+scrape_playwright_stealth.py
+scrape_playwright_nextdata.py
+scrape_playwright_direct.py
 
-# Python cache
+# Virtual Environment & Python cache
+venv/
 __pycache__/
 *.pyc
-
-# Local system files
-.DS_Store
