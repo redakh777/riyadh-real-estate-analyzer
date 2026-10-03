@@ -25,31 +25,30 @@ def save_checkpoint(new_listings, filename="riyadh_raw_listings.csv"):
     print(f"💾 Checkpoint saved: Appended {len(df)} records to {filename}")
 
 
-def run_full_scraper(max_pages=200):
+def run_full_scraper(max_pages=50):  # Reduced default batch size to avoid long exposure
     output_filename = "riyadh_raw_listings.csv"
 
-    # Reset file if starting a completely fresh run from page 1
     if os.path.isfile(output_filename):
         os.remove(output_filename)
 
     with sync_playwright() as p:
         browser = p.chromium.launch(
-            headless=True,  # Set to True for GitHub Actions headless execution
+            headless=True,
             args=[
                 "--disable-blink-features=AutomationControlled",
                 "--start-maximized",
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
             ],
         )
 
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             locale="en-US",
             viewport={"width": 1920, "height": 1080},
         )
 
         page = context.new_page()
-
-        # Fixed sync stealth call
         stealth_sync(page)
 
         batch_listings = []
@@ -64,22 +63,29 @@ def run_full_scraper(max_pages=200):
             print(f"Scraping Page {page_num} of {max_pages}: {target_url}...")
             
             try:
-                page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
+                page.goto(target_url, wait_until="domcontentloaded", timeout=45000)
                 
-                # --- DEBUG LINES ---
                 print(f"   -> Page Title: {page.title()}")
-                page.wait_for_timeout(3000) # Give extra time for client-side rendering
+                
+                if "blocked" in page.title().lower() or "حظر" in page.title():
+                    print("🚨 Block detected by title! Pausing for 30 seconds to cool down...")
+                    time.sleep(30)
+                    continue
+
+                # Simulate human mouse movement and scrolling
+                page.mouse.move(random.randint(100, 500), random.randint(100, 500))
+                page.evaluate("window.scrollBy(0, window.innerHeight / 2)")
+                page.wait_for_timeout(random.randint(4000, 7000))
                 
                 page.wait_for_selector('a[href*="/riyadh/"]', timeout=15000)
             except Exception as e:
                 print(f"⚠️ Timeout or network issue on page {page_num}. Skipping... Error: {e}")
                 continue
 
-            # Scroll to hydrate lazy elements
-            page.evaluate("window.scrollBy(0, 1000)")
-            
-            # Randomized human-like delay (3 to 6 seconds)
-            time.sleep(random.uniform(3.0, 6.0))
+            # Heavy human-like delay between pages (10 to 20 seconds)
+            sleep_time = random.uniform(10.0, 20.0)
+            print(f"⏳ Waiting {sleep_time:.1f}s to mimic human reading pattern...")
+            time.sleep(sleep_time)
 
             listing_links = page.locator('a[href*="/riyadh/"]').all()
             page_count = 0
@@ -92,7 +98,6 @@ def run_full_scraper(max_pages=200):
                     if not raw_text or not href:
                         continue
 
-                    # Extract price via Regex
                     price_match = re.search(
                         r"(?:SAR|SR|\b)\s*([\d,]+)\s*(?:SAR|SR|\b)", raw_text
                     )
@@ -102,7 +107,6 @@ def run_full_scraper(max_pages=200):
                         else None
                     )
 
-                    # Extract area via Regex
                     area_match = re.search(
                         r"([\d,]+)\s*(?:sqm|m²|m2)", raw_text, re.IGNORECASE
                     )
@@ -112,7 +116,6 @@ def run_full_scraper(max_pages=200):
                         else None
                     )
 
-                    # Extract District Name from URL path
                     district = "Riyadh"
                     path_parts = href.strip("/").split("/")
                     if len(path_parts) >= 2:
@@ -141,17 +144,14 @@ def run_full_scraper(max_pages=200):
 
             print(f"   -> Captured {page_count} items from page {page_num}.")
 
-            # Checkpoint increment: save every 10 pages
-            if page_num % 10 == 0 and batch_listings:
+            if page_num % 5 == 0 and batch_listings:
                 save_checkpoint(batch_listings, output_filename)
-                batch_listings = [] # Clear memory batch
+                batch_listings = []
 
-            # Periodic breather every 25 pages to remain fully undetected
-            if page_num % 25 == 0:
-                print("☕ Taking a short 15-second breather to keep connection healthy...")
-                time.sleep(15)
+            if page_num % 10 == 0:
+                print("☕ Taking an extended 30-second breather to remain completely undetected...")
+                time.sleep(30)
 
-        # Save any remainder listings at the very end
         if batch_listings:
             save_checkpoint(batch_listings, output_filename)
 
@@ -161,9 +161,8 @@ def run_full_scraper(max_pages=200):
 
 
 if __name__ == "__main__":
-    run_full_scraper(max_pages=200)
+    run_full_scraper(max_pages=50) # Start testing with 50 pages first
 
-    # Final post-processing for deduplication
     if os.path.isfile("riyadh_raw_listings.csv"):
         df = pd.read_csv("riyadh_raw_listings.csv")
         if not df.empty:
