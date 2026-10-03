@@ -4,7 +4,7 @@ import time
 import re
 import pandas as pd
 from playwright.sync_api import sync_playwright
-from playwright_stealth import Stealth
+from playwright_stealth import stealth_sync
 
 
 def save_checkpoint(new_listings, filename="riyadh_raw_listings.csv"):
@@ -34,7 +34,7 @@ def run_full_scraper(max_pages=200):
 
     with sync_playwright() as p:
         browser = p.chromium.launch(
-            headless=False,
+            headless=True,  # Set to True for GitHub Actions headless execution
             args=[
                 "--disable-blink-features=AutomationControlled",
                 "--start-maximized",
@@ -44,13 +44,13 @@ def run_full_scraper(max_pages=200):
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
             locale="en-US",
-            viewport=None,
+            viewport={"width": 1920, "height": 1080},
         )
 
         page = context.new_page()
 
-        stealth = Stealth()
-        stealth.apply_stealth_sync(page)
+        # Fixed sync stealth call
+        stealth_sync(page)
 
         batch_listings = []
 
