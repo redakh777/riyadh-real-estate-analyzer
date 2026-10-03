@@ -26,7 +26,7 @@ def run_full_scraper(max_pages=50):
     if os.path.isfile(output_filename):
         os.remove(output_filename)
 
-    # Use curl_cffi session with explicit Chrome TLS fingerprint impersonation
+    API_KEY = os.getenv("SCRAPER_API_KEY")
     session = cf_requests.Session(impersonate="chrome124")
     batch_listings = []
 
@@ -45,19 +45,24 @@ def run_full_scraper(max_pages=50):
             print(f"\n--- Scraping Page {page_num} (Attempt #{attempts}): {target_url} ---", flush=True)
 
             try:
+                # Routes through your scraper API if available, otherwise runs direct
+                if API_KEY:
+                    fetch_url = f"http://api.scraperapi.com?api_key={API_KEY}&url={target_url}"
+                else:
+                    fetch_url = target_url
+
                 headers = {
                     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
                     "Accept-Language": "en-US,en;q=0.9,ar;q=0.8",
-                    "Referer": "https://sa.aqar.fm/",
                     "Connection": "keep-alive",
                 }
 
-                response = session.get(target_url, headers=headers, timeout=30)
+                response = session.get(fetch_url, headers=headers, timeout=45)
                 print(f"   -> Status Code: {response.status_code}", flush=True)
 
-                if response.status_code == 403 or "blocked" in response.text.lower() or "حظر" in response.text:
-                    print(f"🚨 Cloudflare block triggered on Page {page_num}!", flush=True)
-                    backoff = 15 * attempts
+                if response.status_code in [403, 401] or "blocked" in response.text.lower() or "حظر" in response.text:
+                    print(f"🚨 Block triggered on Page {page_num}!", flush=True)
+                    backoff = 10 * attempts
                     print(f"💤 Sleeping for {backoff}s before retrying...", flush=True)
                     time.sleep(backoff)
                     continue
@@ -67,7 +72,6 @@ def run_full_scraper(max_pages=50):
                     time.sleep(5)
                     continue
 
-                # Parse HTML with BeautifulSoup
                 soup = BeautifulSoup(response.text, "html.parser")
                 listing_links = soup.select('a[href*="/riyadh/"]')
                 
@@ -138,9 +142,9 @@ def run_full_scraper(max_pages=50):
         if page_num % 10 == 0 and batch_listings:
             save_checkpoint(batch_listings, output_filename)
             batch_listings = []
-            time.sleep(5.0)
+            time.sleep(3.0)
 
-        sleep_time = random.uniform(3.0, 6.0)
+        sleep_time = random.uniform(1.0, 3.0)
         print(f"⏳ Resting {sleep_time:.1f}s...", flush=True)
         time.sleep(sleep_time)
 
