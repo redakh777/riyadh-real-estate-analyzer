@@ -4,7 +4,7 @@ import time
 import re
 import pandas as pd
 from playwright.sync_api import sync_playwright
-from playwright_stealth import Stealth  # Updated v2.x import
+from playwright_stealth import Stealth
 
 
 def save_checkpoint(new_listings, filename="riyadh_raw_listings.csv"):
@@ -38,10 +38,8 @@ def run_full_scraper(max_pages=50):
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     ]
 
-    # Use the v2.x Stealth context manager to wrap playwright
     with Stealth().use_sync(sync_playwright()) as p:
         batch_listings = []
-        consecutive_blocks = 0
 
         for page_num in range(1, max_pages + 1):
             target_url = (
@@ -51,10 +49,11 @@ def run_full_scraper(max_pages=50):
             )
 
             success = False
-            retries = 3
+            total_page_attempts = 0
 
-            for attempt in range(1, retries + 1):
-                print(f"\n--- Scraping Page {page_num} (Attempt {attempt}/{retries}): {target_url} ---", flush=True)
+            while not success:
+                total_page_attempts += 1
+                print(f"\n--- Scraping Page {page_num} (Attempt #{total_page_attempts}): {target_url} ---", flush=True)
                 
                 browser = p.chromium.launch(
                     headless=True,
@@ -77,34 +76,28 @@ def run_full_scraper(max_pages=50):
                 page = context.new_page()
 
                 try:
-                    page.goto(target_url, wait_until="domcontentloaded", timeout=45000)
+                    # Fast timeout load
+                    page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
                     
                     title = page.title()
                     print(f"   -> Page Title: {title}", flush=True)
                     
                     if "blocked" in title.lower() or "حظر" in title:
-                        consecutive_blocks += 1
-                        print(f"🚨 Block detected! (Consecutive block count: {consecutive_blocks})", flush=True)
+                        print(f"🚨 Block detected on Page {page_num}! Discarding context...", flush=True)
                         browser.close()
                         
-                        if consecutive_blocks >= 2:
-                            cooldown = 60 * consecutive_blocks
-                            print(f"🛑 High block frequency detected. Deep cooling down for {cooldown}s...", flush=True)
-                            time.sleep(cooldown)
-                        else:
-                            backoff_time = 30 * attempt
-                            print(f"💤 Backing off for {backoff_time}s...", flush=True)
-                            time.sleep(backoff_time)
+                        # Short adaptive backoff to resume quickly when block clears
+                        backoff = min(10 * total_page_attempts, 60)
+                        print(f"💤 Quick backoff: Sleeping for {backoff}s...", flush=True)
+                        time.sleep(backoff)
                         continue
 
-                    consecutive_blocks = 0
-
-                    # Simulate human mouse movement and scrolling
-                    page.mouse.move(random.randint(200, 700), random.randint(200, 700))
-                    page.evaluate("window.scrollBy(0, window.innerHeight / 1.5)")
-                    page.wait_for_timeout(random.randint(4000, 7000))
+                    # Compressed micro-interactions for bot evasion without heavy lag
+                    page.mouse.move(random.randint(100, 400), random.randint(100, 400))
+                    page.evaluate("window.scrollBy(0, window.innerHeight / 2)")
+                    page.wait_for_timeout(random.randint(1200, 2500))
                     
-                    page.wait_for_selector('a[href*="/riyadh/"]', timeout=15000)
+                    page.wait_for_selector('a[href*="/riyadh/"]', timeout=10000)
 
                     listing_links = page.locator('a[href*="/riyadh/"]').all()
                     page_count = 0
@@ -163,33 +156,32 @@ def run_full_scraper(max_pages=50):
                             continue
 
                     batch_listings.extend(page_listings)
-                    print(f"   -> Successfully captured {page_count} items from page {page_num}.", flush=True)
+                    print(f"   -> ✅ Successfully captured {page_count} items from page {page_num}.", flush=True)
                     success = True
                     browser.close()
                     break
 
                 except Exception as e:
-                    print(f"⚠️ Error on page {page_num} attempt {attempt}: {e}", flush=True)
+                    print(f"⚠️ Error on Page {page_num}: {e}. Retrying...", flush=True)
                     browser.close()
-                    time.sleep(15)
+                    time.sleep(5)
 
-            if not success:
-                print(f"❌ Failed to scrape page {page_num} after {retries} attempts. Moving on.", flush=True)
-
-            if page_num % 5 == 0 and batch_listings:
+            # Checkpoint every 10 pages for speed optimization
+            if page_num % 10 == 0 and batch_listings:
                 save_checkpoint(batch_listings, output_filename)
                 batch_listings = []
-                print("☕ Checkpoint reached. Pausing 30s to stay under rate limits...", flush=True)
-                time.sleep(30.0)
+                print("☕ Fast checkpoint reached. Brief 10s pause...", flush=True)
+                time.sleep(10.0)
 
-            sleep_time = random.uniform(16.0, 26.0)
+            # Ultra-short human jitter delay (3.5 to 7.0 seconds)
+            sleep_time = random.uniform(3.5, 7.0)
             print(f"⏳ Resting {sleep_time:.1f}s before next page...", flush=True)
             time.sleep(sleep_time)
 
         if batch_listings:
             save_checkpoint(batch_listings, output_filename)
 
-    print("\n🎉 Scraping session complete!", flush=True)
+    print("\n🎉 High-speed scraping session complete!", flush=True)
 
 
 if __name__ == "__main__":
