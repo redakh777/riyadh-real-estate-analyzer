@@ -1,14 +1,13 @@
-name: Riyadh Real Estate Pipeline Scheduler
+name: Weekly Real Estate Scraper & Analyzer
 
 on:
   schedule:
-    - cron: '0 8 * * 1'
-  workflow_dispatch:
+    - cron: '0 8 * * 1' # Runs every Monday at 8:00 AM UTC
+  workflow_dispatch: # Allows manual triggers from the GitHub Actions tab
 
 jobs:
-  run-pipeline:
-    runs-on: ubuntu-22.04
-
+  scrape-and-analyze:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -17,24 +16,28 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          python -m playwright install chromium
+          playwright install chromium
 
-      - name: Run Web Scraper
+      - name: Run Web Scraper with API Key
+        env:
+          SCRAPER_API_KEY: ${{ secrets.SCRAPER_API_KEY }}
         run: python scrape_riyadh_full.py
 
-      - name: Run Analysis Pipelines
+      - name: Run Analysis Pipeline
         run: |
           python clean_and_analyze.py
           python clean_and_analyze_apartments.py
 
-      - name: Commit and push updated data/charts back to repo
+      - name: Commit and push updated data and charts
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add riyadh_raw_listings.csv riyadh_cleaned_listings.csv riyadh_cleaned_apartments.csv riyadh_district_price_analysis.csv riyadh_district_apartment_analysis.csv *.png
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Automated update: Scraped and analyzed fresh real estate data" && git push)
+          git add riyadh_raw_listings.csv riyadh_cleaned_listings.csv riyadh_district_price_analysis.csv riyadh_cleaned_apartments.csv riyadh_apartment_district_analysis.csv *.png
+          git commit -m "Auto-update weekly real estate data and visualization charts [skip ci]" || exit 0
+          git push
