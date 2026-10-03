@@ -4,7 +4,17 @@ import time
 import re
 import pandas as pd
 from playwright.sync_api import sync_playwright
-from playwright_stealth import Stealth
+
+# Robust import handling for playwright-stealth versions
+try:
+    from playwright_stealth import Stealth
+    STEALTH_VERSION = "v2"
+except ImportError:
+    try:
+        from playwright_stealth import stealth_sync
+        STEALTH_VERSION = "v1"
+    except ImportError:
+        STEALTH_VERSION = None
 
 
 def save_checkpoint(new_listings, filename="riyadh_raw_listings.csv"):
@@ -38,7 +48,13 @@ def run_full_scraper(max_pages=50):
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     ]
 
-    with Stealth().use_sync(sync_playwright()) as p:
+    # Initialize Playwright using the appropriate stealth context
+    if STEALTH_VERSION == "v2":
+        playwright_cm = Stealth().use_sync(sync_playwright())
+    else:
+        playwright_cm = sync_playwright()
+
+    with playwright_cm as p:
         batch_listings = []
 
         for page_num in range(1, max_pages + 1):
@@ -74,9 +90,12 @@ def run_full_scraper(max_pages=50):
                 )
 
                 page = context.new_page()
+                
+                # Apply v1 stealth manually if v2 context manager wasn't used
+                if STEALTH_VERSION == "v1":
+                    stealth_sync(page)
 
                 try:
-                    # Fast timeout load
                     page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
                     
                     title = page.title()
@@ -86,13 +105,11 @@ def run_full_scraper(max_pages=50):
                         print(f"🚨 Block detected on Page {page_num}! Discarding context...", flush=True)
                         browser.close()
                         
-                        # Short adaptive backoff to resume quickly when block clears
                         backoff = min(10 * total_page_attempts, 60)
                         print(f"💤 Quick backoff: Sleeping for {backoff}s...", flush=True)
                         time.sleep(backoff)
                         continue
 
-                    # Compressed micro-interactions for bot evasion without heavy lag
                     page.mouse.move(random.randint(100, 400), random.randint(100, 400))
                     page.evaluate("window.scrollBy(0, window.innerHeight / 2)")
                     page.wait_for_timeout(random.randint(1200, 2500))
@@ -166,14 +183,12 @@ def run_full_scraper(max_pages=50):
                     browser.close()
                     time.sleep(5)
 
-            # Checkpoint every 10 pages for speed optimization
             if page_num % 10 == 0 and batch_listings:
                 save_checkpoint(batch_listings, output_filename)
                 batch_listings = []
                 print("☕ Fast checkpoint reached. Brief 10s pause...", flush=True)
                 time.sleep(10.0)
 
-            # Ultra-short human jitter delay (3.5 to 7.0 seconds)
             sleep_time = random.uniform(3.5, 7.0)
             print(f"⏳ Resting {sleep_time:.1f}s before next page...", flush=True)
             time.sleep(sleep_time)
