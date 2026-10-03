@@ -22,9 +22,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-
-      - name: Install Playwright Browsers & Dependencies
-        uses: microsoft/playwright-github-action@v1
+          python -m playwright install chromium
 
       - name: Run Web Scraper
         run: python scrape_riyadh_full.py
