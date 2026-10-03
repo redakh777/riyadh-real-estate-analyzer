@@ -1,55 +1,62 @@
-import numpy as np
 import pandas as pd
+import re
 
+def clean_and_analyze(input_file="riyadh_raw_listings.csv", output_file="riyadh_district_price_analysis.csv"):
+    try:
+        df = pd.read_csv(input_file)
+        print(f"Loaded {len(df)} total rows from {input_file}.")
+    except Exception as e:
+        print(f"Error reading {input_file}: {e}")
+        return
 
-def analyze_riyadh_market(file_path="riyadh_raw_listings.csv"):
-    df = pd.read_csv(file_path)
+    # 1. Drop macro summary rows where area_sqm is missing/NaN
+    df = df.dropna(subset=['area_sqm']).copy()
 
-    # 1. Clean Numerical Fields
-    df["price_sar"] = pd.to_numeric(df["price_sar"], errors="coerce")
-    df["area_sqm"] = pd.to_numeric(df["area_sqm"], errors="coerce")
+    # 2. Extract real district names from raw_info text safely
+    def extract_district(row):
+        raw_info = str(row.get('raw_info', ''))
+        match = re.search(r'in Riyadh\s+([A-Za-z\s]+?)(?:\s+[§$¥€\d]|\s+at|\s+-\s+|$)', raw_info)
+        if match:
+            d_name = match.group(1).strip()
+            d_name = re.sub(r'\s+(for\s+sale|for\s+rent|apartment|villa|floor|land).*$', '', d_name, flags=re.IGNORECASE).strip()
+            if d_name and len(d_name) < 30:
+                return d_name
+        return "Riyadh General"
 
-    # Drop missing values
-    df_clean = df.dropna(subset=["price_sar", "area_sqm", "district"]).copy()
+    df['district'] = df.apply(extract_district, axis=1)
 
-    # Filter realistic bounds (properties > 30 sqm and price > 50k SAR)
-    df_clean = df_clean[
-        (df_clean["price_sar"] > 50000) & (df_clean["area_sqm"] > 30)
-    ]
+    # 3. Clean numeric columns safely
+    df['price_clean'] = pd.to_numeric(df['price_sar'], errors='coerce')
+    df['area_clean'] = pd.to_numeric(df['area_sqm'], errors='coerce')
 
-    # 2. Calculate SAR / m²
-    df_clean["price_per_sqm"] = df_clean["price_sar"] / df_clean["area_sqm"]
+    # Drop missing values and filter out unreasonable anomalies/corruption bounds
+    df = df.dropna(subset=['price_clean', 'area_clean']).copy()
+    df = df[(df['area_clean'] >= 10) & (df['area_clean'] <= 100000)]
+    df = df[df['price_clean'] >= 1000]
 
-    # 3. Aggregate Metrics by Neighborhood/District
-    summary = (
-        df_clean.groupby("district")
-        .agg(
-            total_listings=("price_per_sqm", "count"),
-            avg_price_sar=("price_sar", "mean"),
-            avg_area_sqm=("area_sqm", "mean"),
-            avg_price_per_sqm=("price_per_sqm", "mean"),
-            median_price_per_sqm=("price_per_sqm", "median"),
-        )
-        .reset_index()
-    )
+    if len(df) == 0:
+        print("Warning: No valid rows passed the cleaning filters.")
+        return
 
-    # Format numbers for clean presentation
-    summary["avg_price_sar"] = summary["avg_price_sar"].round(0)
-    summary["avg_area_sqm"] = summary["avg_area_sqm"].round(1)
-    summary["avg_price_per_sqm"] = summary["avg_price_per_sqm"].round(2)
-    summary["median_price_per_sqm"] = summary["median_price_per_sqm"].round(2)
+    print(f"Processing {len(df)} valid property listings...")
 
-    # Sort descending by price per square meter
-    summary = summary.sort_values(by="avg_price_per_sqm", ascending=False)
+    # 4. Calculate Price per Square Meter
+    df['sar_per_sqm'] = df['price_clean'] / df['area_clean']
 
-    return summary
+    # 5. Group by District and aggregate statistics
+    summary = df.groupby('district').agg(
+        total_listings=('sar_per_sqm', 'count'),
+        avg_price_sar=('price_clean', 'mean'),
+        avg_area_sqm=('area_clean', 'mean'),
+        avg_price_per_sqm=('sar_per_sqm', 'mean'),
+        median_price_per_sqm=('sar_per_sqm', 'median')
+    ).reset_index()
 
+    summary = summary.round(2).sort_values(by='total_listings', ascending=False)
+    summary.to_csv(output_file, index=False)
+
+    print(f"\nSuccess! Saved results to {output_file}:")
+    print(summary.to_string())
 
 if __name__ == "__main__":
-    summary_df = analyze_riyadh_market()
-    summary_df.to_csv(
-        "riyadh_district_price_analysis.csv", index=False, encoding="utf-8-sig"
-    )
-
-    print("\n--- Riyadh District Real Estate Analysis ---")
-    print(summary_df.to_string(index=False))
+    clean_and_analyze()

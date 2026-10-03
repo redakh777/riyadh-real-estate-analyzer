@@ -1,7 +1,21 @@
-﻿district,total_listings,avg_price_sar,avg_area_sqm,avg_price_per_sqm,median_price_per_sqm
-Villa For Rent,3,221667.0,414.3,592.28,483.33
-Big Flat For Rent,5,92000.0,214.0,487.99,418.12
-Apartment For Rent,16,91219.0,421.0,480.76,531.02
-Warehouse For Rent,1,90000.0,479.0,187.89,187.89
-Land For Sale,1,187500002.0,187500002500.0,0.0,0.0
-Warehouses For Sale,2,61000001.0,61000001845.5,0.0,0.0
+district,total_listings,avg_price_sar,avg_area_sqm,avg_price_per_sqm,median_price_per_sqm
+Ar Rimal,3,94000.0,133.0,688.7,729.17
+As Sahafah,3,107833.33,530.33,579.3,702.7
+Al Qirawan,3,84333.33,314.0,338.22,261.54
+Al Malqa,2,220000.0,469.0,459.77,459.77
+An Narjis,2,100000.0,215.0,488.78,488.78
+Qurtubah,2,93500.0,128.0,733.27,733.27
+Al Munsiyah,2,99000.0,144.0,583.65,583.65
+Ad Dhubbat,1,37000.0,322.0,114.91,114.91
+Al Arid,1,75000.0,188.0,398.94,398.94
+Al Aqiq,1,80000.0,496.0,161.29,161.29
+Al Qadisiyah,1,35000.0,145.0,241.38,241.38
+Al Mathar Ash Shamali,1,110000.0,174.0,632.18,632.18
+Ar Rawdah,1,85000.0,800.0,106.25,106.25
+Ar Rawabi,1,48000.0,150.0,320.0,320.0
+Al Yarmouk,1,90000.0,385.0,233.77,233.77
+Ash Shuhada,1,90000.0,100.0,900.0,900.0
+Dhahrat Laban,1,35000.0,130.0,269.23,269.23
+Hittin,1,52000.0,1712.0,30.37,30.37
+Riyadh General,1,145000.0,300.0,483.33,483.33
+Umm Al Hamam Al Gharbi,1,92000.0,609.0,151.07,151.07
