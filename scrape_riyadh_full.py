@@ -60,7 +60,8 @@ def run_full_scraper(max_pages=50):
                 response = session.get(fetch_url, headers=headers, timeout=45)
                 print(f"   -> Status Code: {response.status_code}", flush=True)
 
-                if response.status_code in [403, 401] or "blocked" in response.text.lower() or "حظر" in response.text:
+                # Rely strictly on status codes to catch blocks instead of generic text matches
+                if response.status_code in [403, 401, 503]:
                     print(f"🚨 Block triggered on Page {page_num}!", flush=True)
                     backoff = 10 * attempts
                     print(f"💤 Sleeping for {backoff}s before retrying...", flush=True)
