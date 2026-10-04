@@ -11,8 +11,10 @@ from urllib.parse import quote
 import pandas as pd
 from bs4 import BeautifulSoup
 from curl_cffi import requests as cf_requests
+from curl_cffi.requests.errors import RequestsError
 
 MAX_ATTEMPTS = 5
+SCRAPER_API_ENDPOINT = "https://api.scraperapi.com/"
 
 
 def retry_after_seconds(value):
@@ -55,13 +57,7 @@ def run_full_scraper(max_pages=50):
         )
 
     output_filename = "riyadh_raw_listings.csv"
-    # Configure proxy session using ScraperAPI's proxy endpoint
-    session = cf_requests.Session(impersonate="chrome124")
-    proxy_url = f"http://scraperapi:{quote(api_key, safe='')}@proxy-server.scraperapi.com:8001"
-    session.proxies = {
-        "http": proxy_url,
-        "https": proxy_url,
-    }
+    session = cf_requests.Session()
 
     batch_listings = []
     output_initialized = False
@@ -87,8 +83,17 @@ def run_full_scraper(max_pages=50):
                     "Connection": "keep-alive",
                 }
 
-                # Direct request to target URL; traffic automatically tunnels through ScraperAPI proxy
-                response = session.get(target_url, headers=headers, timeout=90)
+                response = session.get(
+                    SCRAPER_API_ENDPOINT,
+                    params={
+                        "api_key": api_key,
+                        "country_code": "sa",
+                        "render": "true",
+                        "url": target_url,
+                    },
+                    headers=headers,
+                    timeout=90,
+                )
                 print(f"   -> Status Code: {response.status_code}", flush=True)
 
                 if response.status_code == 407:
@@ -199,7 +204,7 @@ def run_full_scraper(max_pages=50):
                 success = True
                 break
 
-            except cf_requests.exceptions.RequestException as e:
+            except RequestsError as e:
                 if attempts >= MAX_ATTEMPTS:
                     error = str(e).replace(quote(api_key, safe=""), "[REDACTED]")
                     error = error.replace(api_key, "[REDACTED]")

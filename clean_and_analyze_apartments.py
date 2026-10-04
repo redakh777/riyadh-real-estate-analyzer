@@ -10,8 +10,9 @@ plt.rcParams.update({'font.sans-serif': 'DejaVu Sans', 'figure.autolayout': True
 
 def clean_and_analyze(input_file="riyadh_raw_listings.csv", output_file="riyadh_district_apartment_analysis.csv", cleaned_output_file="riyadh_cleaned_apartments.csv"):
     if not os.path.isfile(input_file):
-        print(f"❌ Error: {input_file} not found! Make sure the scraper has finished or the file exists.")
-        return
+        raise FileNotFoundError(
+            f"{input_file} not found. Run the scraper first or provide the raw listings file."
+        )
 
     print("📂 Loading raw dataset...")
     try:
@@ -60,8 +61,7 @@ def clean_and_analyze(input_file="riyadh_raw_listings.csv", output_file="riyadh_
     df = df[df['price_clean'] >= 10000]
 
     if len(df) == 0:
-        print("⚠️ Warning: No valid apartment rows passed the cleaning filters.")
-        return
+        raise ValueError("No valid apartment listings passed the apartment-analysis filters.")
 
     # 5. Feature Engineering: Price per Square Meter
     df['sar_per_sqm'] = df['price_clean'] / df['area_clean']

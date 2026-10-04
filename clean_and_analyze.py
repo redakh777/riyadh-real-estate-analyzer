@@ -10,8 +10,9 @@ plt.rcParams.update({'font.sans-serif': 'DejaVu Sans', 'figure.autolayout': True
 
 def clean_and_analyze(input_file="riyadh_raw_listings.csv", output_file="riyadh_district_price_analysis.csv", cleaned_output_file="riyadh_cleaned_listings.csv"):
     if not os.path.isfile(input_file):
-        print(f"❌ Error: {input_file} not found! Make sure the scraper has finished or the file exists.")
-        return
+        raise FileNotFoundError(
+            f"{input_file} not found. Run the scraper first or provide the raw listings file."
+        )
 
     print("📂 Loading raw dataset...")
     try:
@@ -48,8 +49,7 @@ def clean_and_analyze(input_file="riyadh_raw_listings.csv", output_file="riyadh_
     df = df[df['price_clean'] >= 1000]
 
     if len(df) == 0:
-        print("⚠️ Warning: No valid rows passed the cleaning filters.")
-        return
+        raise ValueError("No valid listings passed the general-analysis cleaning filters.")
 
     print(f"   -> Processing {len(df)} valid property listings...")
 

@@ -33,7 +33,7 @@ An automated Python-based web scraper and data analysis pipeline that extracts r
 
 ## ⚙️ Quick Start / Setup
 
-For local runs, open PowerShell in this project directory and run `python .\scrape_riyadh_full.py --max-pages 1` for a one-page test. The script securely prompts for `SCRAPER_API_KEY` if it is not already set in that terminal; alternatively, set `$env:SCRAPER_API_KEY = "your-key"` first. For GitHub Actions, configure a repository Actions secret named `SCRAPER_API_KEY`; the workflow supplies it to the script non-interactively. The scraper backs off on rate limits and stops when access is denied. If an API key was previously committed or shared, revoke it and create a replacement.
+For local runs, open PowerShell in this project directory and run `python .\scrape_riyadh_full.py --max-pages 1` for a one-page test. The script securely prompts for `SCRAPER_API_KEY` if it is not already set in that terminal; alternatively, set `$env:SCRAPER_API_KEY = "your-key"` first. For GitHub Actions, configure a repository Actions secret named `SCRAPER_API_KEY`; the **Weekly Real Estate Scraper & Analyzer** workflow supplies it to the scraper non-interactively and generates the raw listings file before analysis. The separate **Riyadh Real Estate Analysis Only** workflow requires an existing `riyadh_raw_listings.csv` in the repository. The scraper backs off on rate limits and stops when access is denied. If an API key was previously committed or shared, revoke it and create a replacement.
 
 1. **Clone the repository:**
    ```bash
