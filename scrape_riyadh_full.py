@@ -26,8 +26,8 @@ def run_full_scraper(max_pages=50):
     if os.path.isfile(output_filename):
         os.remove(output_filename)
 
-    # Use environment variable with fallback API key
-    API_KEY = os.getenv("SCRAPER_API_KEY") or "12ebdc20659273de164b84c57b0e51db"
+    # Updated with your new API key fallback
+    API_KEY = os.getenv("SCRAPER_API_KEY") or "5234ec0ee0eefa56a74057447d787f8f"
 
     session = cf_requests.Session(impersonate="chrome124")
     batch_listings = []
@@ -47,7 +47,6 @@ def run_full_scraper(max_pages=50):
             print(f"\n--- Scraping Page {page_num} (Attempt #{attempts}): {target_url} ---", flush=True)
 
             try:
-                # Route through ScraperAPI with Saudi geo-targeting AND JS rendering enabled to fix 500 errors
                 if API_KEY:
                     fetch_url = f"http://api.scraperapi.com?api_key={API_KEY}&country_code=sa&render=true&url={target_url}"
                 else:
@@ -59,7 +58,6 @@ def run_full_scraper(max_pages=50):
                     "Connection": "keep-alive",
                 }
 
-                # Increased timeout to 90 seconds because JS rendering takes slightly longer
                 response = session.get(fetch_url, headers=headers, timeout=90)
                 print(f"   -> Status Code: {response.status_code}", flush=True)
 
