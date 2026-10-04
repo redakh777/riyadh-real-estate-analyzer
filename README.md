@@ -5,6 +5,7 @@ An automated Python-based web scraper and data analysis pipeline that extracts r
 ## 🚀 Key Features
 - **Polite scraping**: Uses the configured ScraperAPI account, spaces page requests, and stops on access-denied or challenge responses rather than attempting to bypass them.
 - **Attribute Extraction**: Parses property prices (SAR), surface area ($\text{m}^2$), listing titles, and district locations.
+- **District-level reports**: Groups listings by the district slug in each Aqar listing URL and exports listing counts, average price and area, and mean/median price per square meter.
 - **Data Cleaning & Analysis**: Cleans raw text attributes, filters invalid records, and computes average and median $\text{SAR/m}^2$ grouped by Riyadh district using Pandas.
 - **Targeted Categorization**: Includes dedicated analysis pipelines for general residential properties as well as strict apartment-only filtering.
 

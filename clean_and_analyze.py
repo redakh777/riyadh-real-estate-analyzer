@@ -3,6 +3,7 @@ import re
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+from riyadh_analysis_utils import extract_district
 
 # Set visual style for professional portfolio plots
 sns.set_theme(style="whitegrid")
@@ -25,18 +26,8 @@ def clean_and_analyze(input_file="riyadh_raw_listings.csv", output_file="riyadh_
     # 1. Drop macro summary rows where area_sqm is missing/NaN
     df = df.dropna(subset=['area_sqm']).copy()
 
-    # 2. Extract real district names from raw_info text safely
+    # 2. Extract district names from listing URLs, with text as a fallback
     print("🏙️ Extracting neighborhood and district names...")
-    def extract_district(row):
-        raw_info = str(row.get('raw_info', ''))
-        match = re.search(r'in Riyadh\s+([A-Za-z\s]+?)(?:\s+[§$¥€\d]|\s+at|\s+-\s+|$)', raw_info)
-        if match:
-            d_name = match.group(1).strip()
-            d_name = re.sub(r'\s+(for\s+sale|for\s+rent|apartment|villa|floor|land).*$', '', d_name, flags=re.IGNORECASE).strip()
-            if d_name and len(d_name) < 30:
-                return d_name
-        return "Riyadh General"
-
     df['district'] = df.apply(extract_district, axis=1)
 
     # 3. Clean numeric columns safely & filter out anomalies
