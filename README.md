@@ -3,7 +3,7 @@
 An automated Python-based web scraper and data analysis pipeline that extracts real estate property listings across Riyadh, cleans numerical metrics, handles multi-format properties (general vs. apartments), and calculates key pricing indicators like average price per square meter ($\text{SAR/m}^2$) grouped by neighborhood district.
 
 ## 🚀 Key Features
-- **Anti-Bot WAF Clearance**: Uses Playwright browser automation and `playwright-stealth` to bypass edge firewall anti-bot challenges (Cloudflare / MXP WAF).
+- **Polite scraping**: Uses the configured ScraperAPI account, spaces page requests, and stops on access-denied or challenge responses rather than attempting to bypass them.
 - **Attribute Extraction**: Parses property prices (SAR), surface area ($\text{m}^2$), listing titles, and district locations.
 - **Data Cleaning & Analysis**: Cleans raw text attributes, filters invalid records, and computes average and median $\text{SAR/m}^2$ grouped by Riyadh district using Pandas.
 - **Targeted Categorization**: Includes dedicated analysis pipelines for general residential properties as well as strict apartment-only filtering.
@@ -32,6 +32,8 @@ An automated Python-based web scraper and data analysis pipeline that extracts r
 ![Top Districts](riyadh_top_districts.png)
 
 ## ⚙️ Quick Start / Setup
+
+For local runs, open PowerShell in this project directory and run `python .\scrape_riyadh_full.py --max-pages 1` for a one-page test. The script securely prompts for `SCRAPER_API_KEY` if it is not already set in that terminal; alternatively, set `$env:SCRAPER_API_KEY = "your-key"` first. For GitHub Actions, configure a repository Actions secret named `SCRAPER_API_KEY`; the workflow supplies it to the script non-interactively. The scraper backs off on rate limits and stops when access is denied. If an API key was previously committed or shared, revoke it and create a replacement.
 
 1. **Clone the repository:**
    ```bash
